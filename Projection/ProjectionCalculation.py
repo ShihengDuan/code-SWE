@@ -51,10 +51,10 @@ CESM_hist, CESM_rcp = load_data("CESM-CAM5")
 CNRM_hist, CNRM_rcp = load_data("CNRM-CM5")
 GFDL_hist, GFDL_rcp = load_data("GFDL-ESM2M")
 HadGEM_hist, HadGEM_rcp = load_data("HadGEM2-ES")
-'''
+
 MIROC_hist, MIROC_rcp = load_data("MIROC5")
 
-'''
+
 EC_hist_loca, EC_rcp_loca = load_loca("EC-EARTH")
 CESM_hist_loca, CESM_rcp_loca = load_loca("CESM-CAM5")
 CNRM_hist_loca, CNRM_rcp_loca = load_loca("CNRM-CM5")
@@ -210,7 +210,7 @@ def calculate_model(swe_hist, swe_rcp):
     HadGEM_date_hist,
     HadGEM_date_rcp,
 ) = calculate_model(HadGEM_hist, HadGEM_rcp)
-'''
+
 (
     MIROC_hist_range,
     MIROC_rcp_range,
@@ -234,7 +234,7 @@ np.save('Metrics/MIROC_hist_peak', MIROC_hist_peak)
 np.save('Metrics/MIROC_rcp_peak', MIROC_rcp_peak)
 np.save('Metrics/MIROC_date_hist', MIROC_date_hist)
 np.save('Metrics/MIROC_date_rcp', MIROC_date_rcp)
-'''
+
 np.save('Metrics/HadGEM_hist_range', HadGEM_hist_range)
 np.save('Metrics/HadGEM_rcp_range', HadGEM_rcp_range)
 np.save('Metrics/HadGEM_hist_acc', HadGEM_hist_acc)
@@ -351,7 +351,7 @@ np.save('Metrics/EC_date_rcp', EC_date_rcp)
     HadGEM_date_hist,
     HadGEM_date_rcp,
 ) = calculate_model(HadGEM_hist_loca, HadGEM_rcp_loca)
-'''
+
 (
     MIROC_hist_range,
     MIROC_rcp_range,
@@ -375,7 +375,7 @@ np.save('Metrics/MIROC_hist_peak_loca', MIROC_hist_peak)
 np.save('Metrics/MIROC_rcp_peak_loca', MIROC_rcp_peak)
 np.save('Metrics/MIROC_date_hist_loca', MIROC_date_hist)
 np.save('Metrics/MIROC_date_rcp_loca', MIROC_date_rcp)
-'''
+
 np.save('Metrics/HadGEM_hist_range_loca', HadGEM_hist_range)
 np.save('Metrics/HadGEM_rcp_range_loca', HadGEM_rcp_range)
 np.save('Metrics/HadGEM_hist_acc_loca', HadGEM_hist_acc)
@@ -432,3 +432,48 @@ np.save('Metrics/EC_date_hist_loca', EC_date_hist)
 np.save('Metrics/EC_date_rcp_loca', EC_date_rcp)
 
 '''
+## NSIDC
+
+nsidc = xa.open_dataarray('../NSIDC/SWES_NSIDC_hist.nc')
+nsidc = nsidc.reindex(lat=nsidc.lat[::-1])
+nsidc = nsidc.transpose("lat", "lon", "time")
+
+def acc_melt_day_nsidc(slice_data):
+    acc_days = np.zeros((167, 107))
+    melt_days = np.zeros((167, 107))
+    peaks = np.zeros((167, 107))
+    peak_days = np.zeros((167, 107))
+    for i in range(167):
+        for j in range(107):
+            series = slice_data[i, j].data
+            peaks[i, j] = np.max(series)
+            if np.isnan(peaks[i, j]):
+                acc_days[i, j] = np.nan
+                peak_days[i, j] = np.nan
+                melt_days[i, j] = np.nan
+            else:
+                diff_series = series - peaks[i, j] * 0.1  # 10% peak of SWE
+                acc_days[i, j] = np.argmin(abs(diff_series[:180]))
+                peak_days[i, j] = np.argmax(series)
+                melt_days[i, j] = peak_days[i, j] + np.argmin(abs(diff_series[np.argmax(series) :]))
+
+    return acc_days, melt_days, peaks, peak_days
+hist_acc_nsidc = []
+hist_melt_nsidc = []
+hist_days_nsidc = []
+hist_peaks_nsidc = []
+for year in tqdm(range(1982, 1999)):
+    slice_data = nsidc.sel(time=slice(str(year) + "-10-01", str(year + 1) + "-09-30"))
+    acc_days, melt_days, peaks, peak_days = acc_melt_day_nsidc(slice_data)
+    hist_acc_nsidc.append(acc_days)
+    hist_melt_nsidc.append(melt_days)
+    hist_days_nsidc.append(peak_days)
+    hist_peaks_nsidc.append(peaks)
+hist_acc_nsidc = np.array(hist_acc_nsidc)
+hist_melt_nsidc = np.array(hist_melt_nsidc)
+hist_days_nsidc = np.array(hist_days_nsidc)
+hist_peaks_nsidc = np.array(hist_peaks_nsidc)
+np.save('Metrics/NSIDC_date_hist', hist_days_nsidc)
+np.save('Metrics/NSIDC_hist_acc', hist_acc_nsidc)
+np.save('Metrics/NSIDC_hist_melt', hist_melt_nsidc)
+np.save('Metrics/NSIDC_hist_peak', hist_peaks_nsidc)
