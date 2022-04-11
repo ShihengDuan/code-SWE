@@ -8,3 +8,7 @@ The 'ensemble' files performes initial-weight ensemble run for the deep learning
 The 'Projection' is for projection analysis with RCP8.5 LOCA datasets.  
 
 The 'models' folder contains necessary code for model definition in PyTorch.  
+
+Associated model weights and outputs: 10.5281/zenodo.6419931 and 10.5281/zenodo.6430612 
+
+
