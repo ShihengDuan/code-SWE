@@ -140,7 +140,7 @@ class COWholeDataset(Dataset):
 class COgridMETDataset(Dataset):  # lat 168, lon 108
     def __init__(self, forcings: Dict, topo_file, attributions, lat, window_size=180,
                  scaler_mean='/tempest/duan0000/SWE/gridMET/Rocky/gridmet_mean.nc',
-                 scaler_std='/tempest/duan0000/SWE/gridMET/Rocky/gridmet_std.nc'):
+                 scaler_std='/tempest/duan0000/SWE/gridMET/Rocky/gridmet_std.nc', hist=False):
         super(COgridMETDataset, self).__init__()
         self.window_size = window_size
         self.forcings = []
@@ -148,7 +148,10 @@ class COgridMETDataset(Dataset):  # lat 168, lon 108
         self.scaler_std = xa.open_dataset(scaler_std)
         for forcing in forcings:
             forcing_data = xa.open_dataarray(forcings[forcing])
-            forcing_data = forcing_data.sel(time=slice('2008-10-01', '2018-09-30'))
+            if hist:
+                forcing_data = forcing_data.sel(time=slice('1982-10-01', '1999-09-30'))
+            else:
+                forcing_data = forcing_data.sel(time=slice('2008-10-01', '2018-09-30'))
             forcing_data = forcing_data.isel(lat=lat)  # select the point.
             forcing_data = (forcing_data - self.scaler_mean[forcing]) / self.scaler_std[forcing]
             self.forcings.append(forcing_data)
