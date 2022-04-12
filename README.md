@@ -9,6 +9,12 @@ The 'Projection' is for projection analysis with RCP8.5 LOCA datasets.
 
 The 'models' folder contains necessary code for model definition in PyTorch.  
 
+The 'data' folder contains files for dataset definition, including SNOTEL and Rocky Mountains.
+
+'NSIDC' is used to process NSIDC-UA dataset and ExtraGirdMet is extrapolation over the Rocky Mountains. 
+
+'Projection' stands for historical and future projections forced by LOCA downscaled CMIP5 data. 
+
 Associated model weights and outputs: 10.5281/zenodo.6419931 and 10.5281/zenodo.6430612 
 
 
