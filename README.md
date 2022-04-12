@@ -9,7 +9,7 @@ Files begin with ```ensemble``` performe initial-weight ensemble run for the dee
 
 ```models``` contains necessary code for model definition in PyTorch.  
 
-```data```` contains files for dataset definition, including SNOTEL and Rocky Mountains.
+```data``` contains files for dataset definition, including SNOTEL and Rocky Mountains.
 
 ```NSIDC``` is used to process NSIDC-UA dataset and ExtraGirdMet is extrapolation over the Rocky Mountains. 
 
