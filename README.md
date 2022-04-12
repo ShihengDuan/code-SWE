@@ -11,7 +11,7 @@ Files begin with ```ensemble``` performe initial-weight ensemble run for the dee
 
 ```data``` contains files for dataset definition, including SNOTEL and Rocky Mountains.
 
-```NSIDC``` is used to process NSIDC-UA dataset and ExtraGirdMet is extrapolation over the Rocky Mountains. 
+```NSIDC``` is used to process NSIDC-UA dataset and ```ExtraGirdMet``` is extrapolation over the Rocky Mountains. 
 
 
 Associated model weights and outputs: 10.5281/zenodo.6419931 and 10.5281/zenodo.6430612 
