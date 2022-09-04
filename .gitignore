@@ -35,5 +35,16 @@
 /utah_rocky_swe_snotel_prism_topo.nc
 /wus_prism_topo_800m.nc
 /wus_swe_snotel_prism_topo.nc
+/ExtraGridMet/Attention_clean_lats
 *.nc
 *.pickle
+*.tif
+*.xml
+*.npy
+*.out
+*.pyc
+events*
+*.yaml
+epoch=*
+*.ckpt
+*.sh
