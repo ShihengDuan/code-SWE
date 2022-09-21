@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import xarray as xa
 from torch.utils.data import Dataset
-
+from tqdm import tqdm
 
 def find_snow5km(lon, lat, snowcover: xa.DataArray):
     lat5km = snowcover.lat.data
@@ -380,6 +380,16 @@ class gridMETDatasetStation(Dataset):
                 self.forcings_norm.append(
                     (forcing_norm - self.forcings_mean[i]) / self.forcings_std[i])
             self.y_log = self.y_log.sel(time=slice('1999-10-01', '2008-09-30'))
+            self.y_log = self.y_log.isel(n_stations=self.station)
+            self.y_log = (self.y_log - self.target_mean) / self.target_std
+        elif self.mode.upper() == 'ALL': # used for spatial cross-validation. 
+            for i, forcing_data in enumerate(self.forcings):
+                forcing_norm = forcing_data.sel(
+                    time=slice('1980-10-01', '2018-09-30'))
+                forcing_norm = forcing_norm.isel(n_stations=self.station)
+                self.forcings_norm.append(
+                    (forcing_norm - self.forcings_mean[i]) / self.forcings_std[i])
+            self.y_log = self.y_log.sel(time=slice('1980-10-01', '2018-09-30'))
             self.y_log = self.y_log.isel(n_stations=self.station)
             self.y_log = (self.y_log - self.target_mean) / self.target_std
 
@@ -771,3 +781,231 @@ class gridMETDatasetStationAveRH(Dataset):
 
     def __getitem__(self, item):  # x_d_new: N, WS, features.
         return self.x_d_new[item], self.attr_norm, self.y_d_new[item], self.qstd
+
+
+# Data assimilation (default SNOW17 run as input)
+class gridMETDatasetStationSNOW17(Dataset):
+    def __init__(self, forcings: Dict, topo_file, attributions, target, station_id, window_size=180, mode='Train'):
+        super(gridMETDatasetStationSNOW17, self).__init__()
+        default = xa.open_dataarray('/tempest/duan0000/snow17/default17/default.nc')
+        self.default = default.isel(n_stations=station_id) / 25.4 # mm to inch
+        self.station = station_id
+        # attrs and SWE target:
+        self.attr = xa.open_dataset(topo_file)
+        self.y = self.attr[target[0]]
+        self.forcings = []
+        self.mode = mode
+        self.window_size = window_size
+        forcing_list = list(forcings.keys())
+        for forcing in forcing_list:
+            forcing_data = xa.open_dataarray(forcings[forcing])
+            self.forcings.append(forcing_data)
+        self._split_and_norm()  # x, y_log
+        # time, features.
+        self.x_d = self._get_feature_array(self.forcings_norm, forcing_list)
+        self.x_d = np.concatenate((self.x_d, (self.default.data).reshape(-1, 1)), axis=-1) # concatenate snow17 into features. 
+        self.y_log_d = np.array(self.y_log)  # time.
+        self._reshape()
+
+        self.attr = self.attr[attributions]
+        attr_mean = self.attr.mean()
+        attr_std = self.attr.std()
+        self.attr_norm = (self.attr - attr_mean) / attr_std  # stations.
+        self.attr_norm = self.attr_norm.isel(n_stations=station_id)  # select
+        self.attr_norm = np.array([self.attr_norm[feature]
+                                  for feature in attributions])  # 5,
+        self.attr_norm = torch.from_numpy(self.attr_norm.astype('float32'))
+        self.qstd = torch.empty(0)
+        # NANs:
+        # last prediction, 0--> the SWE feature
+        idx = np.where(np.isnan(self.y_d_new[:, -1, 0]))[0]
+        self.y_d_new = np.delete(self.y_d_new, idx, axis=0)
+        self.x_d_new = np.delete(self.x_d_new, idx, axis=0)
+        self.x_d = np.nan_to_num(self.x_d, nan=0)  # replace NAN.
+        self.x_d_new, self.y_d_new = torch.from_numpy(self.x_d_new.astype('float32')), \
+            torch.from_numpy((self.y_d_new.astype('float32')))
+
+    def _reshape(self):
+        n_samples = self.x_d.shape[0] - self.window_size + 1
+        # N, WS, features.
+        self.x_d_new = np.zeros(
+            (n_samples, self.window_size, self.x_d.shape[1])) 
+        self.y_d_new = np.zeros((n_samples, self.window_size, 1))  # N, WS, 1
+        for i in range(n_samples):
+            self.x_d_new[i, :] = self.x_d[i:i + self.window_size, :]
+            self.y_d_new[i, :, 0] = self.y_log_d[i:i + self.window_size]
+
+    def _split_and_norm(self):  # target: log transform
+        # self.y_log = np.log(self.y + 0.2)
+        self.y_log = self.y  # linear Z-transform.
+        self.forcings_mean = []
+        self.forcings_std = []
+        self.forcings_norm = []
+        # Calculate mean and std with all stations.
+        for forcing_data in self.forcings:
+            self.forcings_mean.append(forcing_data.sel(
+                time=slice('1980-10-01', '1999-09-30')).mean().data)
+            self.forcings_std.append(forcing_data.sel(
+                time=slice('1980-10-01', '1999-09-30')).std().data)
+        self.target_mean = self.y_log.sel(
+            time=slice('1980-10-01', '1999-09-30')).mean().data
+        self.target_std = self.y_log.sel(
+            time=slice('1980-10-01', '1999-09-30')).std().data
+        # select stations in train-test-split.
+        if self.mode.upper() == 'TRAIN':
+            for i, forcing_data in enumerate(self.forcings):
+                forcing_norm = forcing_data.sel(
+                    time=slice('1980-10-01', '1999-09-30'))
+                forcing_norm = forcing_norm.isel(n_stations=self.station)
+                self.forcings_norm.append(
+                    (forcing_norm - self.forcings_mean[i]) / self.forcings_std[i])
+            self.y_log = self.y_log.sel(time=slice('1980-10-01', '1999-09-30'))
+            self.y_log = self.y_log.isel(n_stations=self.station)
+            self.y_log = (self.y_log - self.target_mean) / self.target_std
+            self.default = self.default.sel(time=slice('1980-10-01', '1999-09-30'))
+            self.default = (self.default - self.target_mean) / self.target_std
+        elif self.mode.upper() == 'TEST':
+            for i, forcing_data in enumerate(self.forcings):
+                forcing_norm = forcing_data.sel(
+                    time=slice('2008-10-01', '2018-09-30'))
+                forcing_norm = forcing_norm.isel(n_stations=self.station)
+                self.forcings_norm.append(
+                    (forcing_norm - self.forcings_mean[i]) / self.forcings_std[i])
+            self.y_log = self.y_log.sel(time=slice('2008-10-01', '2018-09-30'))
+            self.y_log = self.y_log.isel(n_stations=self.station)
+            self.y_log = (self.y_log - self.target_mean) / self.target_std
+            self.default = self.default.sel(time=slice('2008-10-01', '2018-09-30'))
+            self.default = (self.default - self.target_mean) / self.target_std
+        elif self.mode.upper() == 'VAL':
+            for i, forcing_data in enumerate(self.forcings):
+                forcing_norm = forcing_data.sel(
+                    time=slice('1999-10-01', '2008-09-30'))
+                forcing_norm = forcing_norm.isel(n_stations=self.station)
+                self.forcings_norm.append(
+                    (forcing_norm - self.forcings_mean[i]) / self.forcings_std[i])
+            self.y_log = self.y_log.sel(time=slice('1999-10-01', '2008-09-30'))
+            self.y_log = self.y_log.isel(n_stations=self.station)
+            self.y_log = (self.y_log - self.target_mean) / self.target_std
+            self.default = self.default.sel(time=slice('1999-10-01', '2008-09-30'))
+            self.default = (self.default - self.target_mean) / self.target_std
+
+    def _get_feature_array(self, data_in, features):
+        x = np.array([data_in[i].values for i,
+                     feature in enumerate(features)]).T
+        return x
+
+    def __len__(self):
+        return self.x_d_new.shape[0]
+
+    def __getitem__(self, item):  # x_d_new: N, WS, features.
+        return self.x_d_new[item], self.attr_norm, self.y_d_new[item], self.qstd
+
+import time
+import gc
+# Construct Dataset by Water Years. 
+class gridMETDatasetStationWY(Dataset): 
+    def __init__(self, forcings: Dict, topo_file, attributions, target, station_id, 
+                train_wy, test_wy, target_mean, target_std,
+                all_train_time, window_size=180, mode='Train') -> None:
+        super(gridMETDatasetStationWY, self).__init__()
+        self.station = station_id
+        self.train_wy = train_wy
+        self.test_wy = test_wy
+        self.all_train_time = all_train_time
+        self.target_mean = target_mean
+        self.target_std = target_std
+        # attrs and SWE target:
+        self.attr = xa.open_dataset(topo_file)
+        self.y = self.attr[target[0]]
+        self.forcings = []
+        self.mode = mode
+        self.window_size = window_size
+        forcing_list = list(forcings.keys())
+        for forcing in forcing_list:
+            forcing_data = xa.open_dataarray(forcings[forcing])
+            self.forcings.append(forcing_data)
+        self._split_and_norm()  # x, y_log
+        idx = np.where(np.isnan(self.y_d[:, -1, 0]))[0]
+        self.y_d = np.delete(self.y_d, idx, axis=0)
+        self.x_d = np.delete(self.x_d, idx, axis=0)
+        self.x_d = np.nan_to_num(self.x_d, nan=0)  # replace NAN.
+        self.n_samples = self.x_d.shape[0]
+        self.x_d, self.y_d = torch.from_numpy(self.x_d.astype('float32')), \
+            torch.from_numpy((self.y_d.astype('float32')))
+        # Static variables
+        self.attr = self.attr[attributions]
+        attr_mean = self.attr.mean()
+        attr_std = self.attr.std()
+        self.attr_norm = (self.attr - attr_mean) / attr_std  # stations.
+        self.attr_norm = self.attr_norm.isel(n_stations=station_id)  # select
+        self.attr_norm = np.array([self.attr_norm[feature]
+                                  for feature in attributions])  # 5,
+        self.attr_norm = torch.from_numpy(self.attr_norm.astype('float32'))
+        self.qstd = torch.empty(0)
+
+    def __len__(self):
+        return self.n_samples
+
+    def __getitem__(self, item):
+        return self.x_d[item], self.attr_norm, self.y_d[item], self.qstd
+
+    def _split_and_norm(self):
+        self.y_log = self.y  # linear Z-transform.
+        # Transpose SWE to make time the first dimension for faster slice. 
+        self.y_log = self.y_log.transpose('time','n_stations')
+        self.forcings_mean = []
+        self.forcings_std = []
+        # Get training time period from train_wy
+        '''all_train_time = []
+        for year in self.train_wy:
+            time_slice = slice(str(year)+'-10-01', str(year+1)+'-09-30')
+            timestamp = self.forcings[0].sel(time=time_slice).time.data
+            for time in timestamp:
+                all_train_time.append(time)'''
+        # Calculate mean and std with all stations over train_wy.
+        for forcing_data in self.forcings:
+            self.forcings_mean.append(forcing_data.sel(
+                time=self.all_train_time).mean().data)
+            self.forcings_std.append(forcing_data.sel(
+                time=self.all_train_time).std().data)        
+        # Get Data and Construct Array. 
+        if self.mode.upper()=='TRAIN': # training with train_wy
+            wy_list = self.train_wy
+        elif self.mode.upper()=='TEST':
+            wy_list = self.test_wy
+        for ind, year in enumerate(wy_list): # iterate through water years
+            self.forcings_norm_wy = []
+            start_date = np.datetime64(str(year)+'-10-01')-np.timedelta64(180, 'D')
+            end_date = np.datetime64(str(year+1)+'-09-30')
+            for i, forcing_data in enumerate(self.forcings):
+                forcing_norm = forcing_data.sel(
+                    time=slice(start_date, end_date))
+                forcing_norm = forcing_norm.isel(n_stations=self.station)
+                self.forcings_norm_wy.append(
+                    (forcing_norm - self.forcings_mean[i]) / self.forcings_std[i])
+            # Concatenate features
+            x = np.array([self.forcings_norm_wy[i].values for i,
+                    feature in enumerate(self.forcings_norm_wy)]).T
+            # print(x.shape, ' x shape') # time, features
+            y_log_wy = self.y_log.sel(time=slice(start_date, end_date))
+            y_log_wy = y_log_wy.isel(n_stations=self.station)
+            y_log_wy = (y_log_wy - self.target_mean) / self.target_std
+            x_wy, y_wy = self._reshape(x, y_log_wy) # N, WS, Features; N, WS, 1
+            if ind ==0: # first water year:
+                self.x_d = x_wy
+                self.y_d = y_wy
+                # print(x_wy.shape, y_wy.shape, ' Water Year')
+            else:
+                self.x_d = np.concatenate((self.x_d, x_wy), axis=0) # concatenate through samples
+                self.y_d = np.concatenate((self.y_d, y_wy), axis=0)
+        
+    def _reshape(self, x, y):
+        n_samples = x.shape[0] - self.window_size + 1
+        # N, WS, features.
+        x_new = np.zeros(
+            (n_samples, self.window_size, x.shape[1])) 
+        y_new = np.zeros((n_samples, self.window_size, 1))  # N, WS, 1
+        for i in range(n_samples):
+            x_new[i, :] = x[i:i + self.window_size, :]
+            y_new[i, :, 0] = y[i:i + self.window_size]
+        return x_new, y_new
