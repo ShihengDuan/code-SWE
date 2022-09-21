@@ -71,31 +71,34 @@ model_type = 'LSTM'
 loss_fn = nn.MSELoss()
 
 attributions = ['longitude', 'latitude', 'elevation_prism', 'dah', 'trasp']
+attributions = ['longitude', 'latitude', 'elevation_30m', 'dah_30m', 'trasp_30m']
 forcings = {'pr': 'gridMET/pr_wus_clean.nc', 'rmax': 'gridMET/rmax_wus_clean.nc', 'rmin': 'gridMET/rmin_wus_clean.nc',
             'sph': 'gridMET/sph_wus_clean.nc', 'srad': 'gridMET/srad_wus_clean.nc', 'tmmn': 'gridMET/tmmn_wus_clean.nc',
             'tmmx': 'gridMET/tmmx_wus_clean.nc', 'vpd': 'gridMET/vpd_wus_clean.nc', 'vs': 'gridMET/vs_wus_clean.nc'}
 n_inputs = len(attributions) + len(forcings)
 target = ['SWE']
 
-permute_id = [3, 4]
+permute_id = 3
 if type(permute_id)==list:
-    print('Permute feature: ', permute_id)
+    print('Permute feature: ', permute_id, [attributions[i] for i in permute_id])
 else:
     print('Permute feature: ', attributions[permute_id])
 path = '/tempest/duan0000/SWE/gridMET/runs_staticGroup/' + \
     model_type.upper() + '_1e-4_H128/Aspect/'
+path = '/tempest/duan0000/SWE/gridMET/runs_staticP_30m/' + \
+    model_type.upper() + '/dah_30m/'
 if not os.path.isdir(path):
     os.makedirs(path)
-
+topo_file = 'SNOTEL/raw_snotel_topo_30m.nc'
 train_ds = []
-for station_id in range(581):  # 765
+for station_id in tqdm(range(581), desc='load training set'):  # 765
     ds = gridMETDatasetStationStaticP(forcings=forcings, attributions=attributions, target=target, window_size=WINDOW_SIZE,
-                                      mode='TRAIN', topo_file='SNOTEL/raw_wus_snotel_topo_clean.nc', station_id=station_id, permute=True,
+                                      mode='TRAIN', topo_file=topo_file, station_id=station_id, permute=True,
                                       permute_id=permute_id)
     train_ds.append(ds)
 train_ds = ConcatDataset(train_ds)
 print(train_ds.__len__())
-for e in [1, 2, 4]:  # ens number
+for e in range(5):  # ens number
     print(e, ' Start')
     if model_type.lower() == 'lstm':
         model = LSTM(hidden_units=HID, input_size=n_inputs,
@@ -113,7 +116,7 @@ for e in [1, 2, 4]:  # ens number
     for station_id in tqdm(range(581), desc='test_ds'):
         ds = gridMETDatasetStationStaticP(forcings=forcings, attributions=attributions, target=target,
                                           window_size=WINDOW_SIZE,
-                                          mode='TEST', topo_file='SNOTEL/raw_wus_snotel_topo_clean.nc',
+                                          mode='TEST', topo_file=topo_file,
                                           station_id=station_id, permute=True, permute_id=permute_id)
         if ds.__len__() > 0:
             y_true, y_pred = evaluate(model1, ds, device=device)
