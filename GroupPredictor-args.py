@@ -85,6 +85,7 @@ model_type = 'LSTM'
 
 loss_fn = nn.MSELoss()
 attributions = ['longitude', 'latitude', 'elevation_prism', 'dah', 'trasp']
+attributions = ['longitude', 'latitude', 'elevation_30m', 'dah_30m', 'trasp_30m']
 forcings = {'pr': 'gridMET/pr_wus_clean.nc', 'rmax': 'gridMET/rmax_wus_clean.nc', 'rmin': 'gridMET/rmin_wus_clean.nc',
             'sph': 'gridMET/sph_wus_clean.nc', 'srad': 'gridMET/srad_wus_clean.nc', 'tmmn': 'gridMET/tmmn_wus_clean.nc',
             'tmmx': 'gridMET/tmmx_wus_clean.nc', 'vpd': 'gridMET/vpd_wus_clean.nc', 'vs': 'gridMET/vs_wus_clean.nc'}
