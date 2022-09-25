@@ -7,7 +7,7 @@ import torch
 from torch import nn
 from torch.utils.data import ConcatDataset, DataLoader
 from tqdm import tqdm
-
+from sklearn.metrics import r2_score
 from data.SWE_Dataset import gridMETDatasetStation
 from models.attention import Attention
 from models.lstm import LSTM
@@ -66,8 +66,8 @@ LR = 1e-4
 HID = 128
 ENS = 10
 device = torch.device('cuda:1')
-model_type = 'LSTM'
-# model_type = 'TCNN'
+# model_type = 'LSTM'
+model_type = 'TCNN'
 # model_type = 'Attention'
 KER = 7
 LEVELS = 5
@@ -80,22 +80,24 @@ embedding = 32
 # path = '/tempest/duan0000/SWE/gridMET/runs_clean/' + model_type.upper() + '_1e-4_K7L5C64/'
 # path = '/tempest/duan0000/SWE/gridMET/runs_clean/' + model_type.upper() + '_1e-4_H128/'
 # path = '/tempest/duan0000/SWE/gridMET/runs_clean/' + model_type.upper() + '_1e-4_HEAD_16_forward_32_NUM_3_EMBED_32/'
-path = '/tempest/duan0000/SWE/gridMET/runs_clean/' + model_type.upper() + 'precipRH_forcing/'
+# path = '/tempest/duan0000/SWE/gridMET/runs_clean/' + model_type.upper() + 'precipRH_forcing/'
+path = '/tempest/duan0000/SWE/gridMET/runs_clean_30m/' + model_type.upper() + '/'
 if not os.path.isdir(path):
     os.makedirs(path)
 loss_fn = nn.MSELoss()
 attributions = ['longitude', 'latitude', 'elevation_prism', 'dah', 'trasp']
+attributions = ['longitude', 'latitude', 'elevation_30m', 'dah_30m', 'trasp_30m']
 forcings = {'pr': 'gridMET/pr_wus_clean.nc', 'rmax': 'gridMET/rmax_wus_clean.nc', 'rmin': 'gridMET/rmin_wus_clean.nc',
             'sph': 'gridMET/sph_wus_clean.nc', 'srad': 'gridMET/srad_wus_clean.nc', 'tmmn': 'gridMET/tmmn_wus_clean.nc',
             'tmmx': 'gridMET/tmmx_wus_clean.nc', 'vpd': 'gridMET/vpd_wus_clean.nc', 'vs': 'gridMET/vs_wus_clean.nc'}
-forcings = {'pr': 'gridMET/pr_wus_clean.nc', 'rmax': 'gridMET/rmax_wus_clean.nc', 'rmin': 'gridMET/rmin_wus_clean.nc'}
+# forcings = {'pr': 'gridMET/pr_wus_clean.nc', 'rmax': 'gridMET/rmax_wus_clean.nc', 'rmin': 'gridMET/rmin_wus_clean.nc'}
 n_inputs = len(attributions) + len(forcings)
 target = ['SWE']
 train_ds = []
-
-for station_id in range(581):  # 765
+topo_file = 'SNOTEL/raw_snotel_topo_30m.nc'
+for station_id in tqdm(range(581), desc='Load Data'):  # 765
     ds = gridMETDatasetStation(forcings=forcings, attributions=attributions, target=target, window_size=WINDOW_SIZE,
-                               mode='TRAIN', topo_file='SNOTEL/raw_wus_snotel_topo_clean.nc', station_id=station_id)
+                               mode='TRAIN', topo_file=topo_file, station_id=station_id)
     train_ds.append(ds)
 train_ds = ConcatDataset(train_ds)
 print(train_ds.__len__())
@@ -116,10 +118,11 @@ for e in range(10):  # ens number
     result_true = {}
     result_pred = {}
     # for station in range(1, 285):  # or 814
+    r2s = []
     for station_id in tqdm(range(581), desc='test_ds'):
         ds = gridMETDatasetStation(forcings=forcings, attributions=attributions, target=target,
                                    window_size=WINDOW_SIZE,
-                                   mode='TEST', topo_file='SNOTEL/raw_wus_snotel_topo_clean.nc',
+                                   mode='TEST', topo_file=topo_file,
                                    station_id=station_id)
         if ds.__len__() > 0:
             y_true, y_pred = evaluate(model, ds, device=device)
@@ -127,7 +130,10 @@ for e in range(10):  # ens number
             y_pred = y_pred.reshape(-1, 1)
             result_true[station_id] = y_true
             result_pred[station_id] = y_pred
+            r2 = r2_score(y_true, y_pred)
+            r2s.append(r2)
     with open(path + 'result_true_' + str(e), 'wb') as f:
         pickle.dump(result_true, f)
     with open(path + 'result_pred_' + str(e), 'wb') as f:
         pickle.dump(result_pred, f)
+    print('Median r2: ', np.median(r2s))
