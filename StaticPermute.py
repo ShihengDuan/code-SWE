@@ -78,15 +78,15 @@ forcings = {'pr': 'gridMET/pr_wus_clean.nc', 'rmax': 'gridMET/rmax_wus_clean.nc'
 n_inputs = len(attributions) + len(forcings)
 target = ['SWE']
 
-permute_id = 3
+permute_id = 4
 if type(permute_id)==list:
     print('Permute feature: ', permute_id, [attributions[i] for i in permute_id])
 else:
     print('Permute feature: ', attributions[permute_id])
 path = '/tempest/duan0000/SWE/gridMET/runs_staticGroup/' + \
     model_type.upper() + '_1e-4_H128/Aspect/'
-path = '/tempest/duan0000/SWE/gridMET/runs_staticP_30m/' + \
-    model_type.upper() + '/dah_30m/'
+path = 'gridMET/runs_staticP_30m/' + \
+    model_type.upper() + '/trasp_30m/'
 if not os.path.isdir(path):
     os.makedirs(path)
 topo_file = 'SNOTEL/raw_snotel_topo_30m.nc'

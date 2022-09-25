@@ -15,7 +15,8 @@ import argparse
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--ens', type=int)
-    parser.add_argument('--permuteid', nargs='+', type=int)
+    # parser.add_argument('--permuteid', nargs='+', type=int) # list
+    parser.add_argument('--permuteid', type=int)
     args = vars(parser.parse_args())
     return args
 
@@ -68,7 +69,9 @@ def evaluate(model, ds, device=torch.device('cuda:0')):
 
 args = get_args()
 ens = args['ens']
-permute_id = args['permuteid']
+# permute_id = args['permuteid']
+permute_id = [1, 2] # Relative humidity
+# permute_id = [5, 6] # temperature
 devices = [torch.device('cuda:0'), torch.device('cuda:1'), torch.device('cuda:2'), torch.device('cuda:3')]
 print(ens, ' STARTED')
 print('PERMUTE_ID: ', permute_id)
@@ -99,18 +102,53 @@ n_inputs = len(attributions) + len(forcings)
 target = ['SWE']
 topo_file = 'SNOTEL/raw_snotel_topo_30m.nc'
 # Loop through feature permutation
-for permute_id in range(len(forcings)):
-    feature = list(forcings.keys())[permute_id]
-    print('Permute feature: ', feature)
-    path = 'gridMET/runs_permute_30m/' + model_type.upper() + '/'
-    if not os.path.isdir(path):
-        os.makedirs(path)
-    
+# for permute_id in range(len(forcings)):
+# feature = list(forcings.keys())[permute_id]
+feature = 'RH'
+# feature = 'Temp'
+print('Permute feature: ', feature)
+path = 'gridMET/runs_permute_30m/' + model_type.upper() + '/'
+if not os.path.exists(path):
+    os.makedirs(path)
+if os.path.exists(path + feature + '_model_ens_' + str(ens)):
+    print('Already trained')
+    model1 = LSTM(hidden_units=HID, input_size=n_inputs, relu_flag=RELU_FLAG)
+    model2 = LSTM(hidden_units=HID, input_size=n_inputs, relu_flag=RELU_FLAG)
+    model1.load_state_dict(torch.load(path + feature + '_model_ens_' + str(ens)))
+    model2.load_state_dict(torch.load(path + feature + '_model_ens_' + str(9-ens)))
+    model1 = model1.to(device)
+    model2 = model2.to(device)
+    result_true = {}
+    result_pred = {}
+    result_pred2 = {}
+
+    for station_id in tqdm(range(581), desc='test_ds'):
+        ds = gridMETDatasetStation(forcings=forcings, attributions=attributions, target=target,
+                                window_size=WINDOW_SIZE,
+                                mode='TEST', topo_file=topo_file,
+                                station_id=station_id, permute=True, permute_id=[permute_id])
+        if ds.__len__() > 0:
+            y_true, y_pred = evaluate(model1, ds, device=device)
+            y_true = y_true.reshape(-1, 1)
+            y_pred = y_pred.reshape(-1, 1)
+            result_true[station_id] = y_true
+            result_pred[station_id] = y_pred
+            y_true, y_pred = evaluate(model2, ds, device=device)
+            y_pred = y_pred.reshape(-1, 1)
+            result_pred2[station_id] = y_pred
+    with open(path + feature + '_result_true_' + str(ens), 'wb') as f:
+        pickle.dump(result_true, f)
+    with open(path + feature + '_result_pred_' + str(ens), 'wb') as f:
+        pickle.dump(result_pred, f)
+    with open(path + feature + '_result_pred_' + str(9-ens), 'wb') as f:
+        pickle.dump(result_pred2, f)
+else:
     train_ds = []
     for station_id in tqdm(range(581), desc='load training set'):  # 765
         ds = gridMETDatasetStation(forcings=forcings, attributions=attributions, target=target, window_size=WINDOW_SIZE,
                                 mode='TRAIN', topo_file=topo_file, station_id=station_id, 
-                                permute=True, permute_id=[permute_id])
+                                permute=True, 
+                                permute_id=permute_id)
         train_ds.append(ds)
     train_ds = ConcatDataset(train_ds)
     print(train_ds.__len__())
@@ -125,12 +163,13 @@ for permute_id in range(len(forcings)):
     result_true = {}
     result_pred = {}
     result_pred2 = {}
-    
+
     for station_id in tqdm(range(581), desc='test_ds'):
         ds = gridMETDatasetStation(forcings=forcings, attributions=attributions, target=target,
                                 window_size=WINDOW_SIZE,
                                 mode='TEST', topo_file=topo_file,
-                                station_id=station_id, permute=True, permute_id=permute_id)
+                                station_id=station_id, permute=True, 
+                                permute_id=permute_id)
         if ds.__len__() > 0:
             y_true, y_pred = evaluate(model1, ds, device=device)
             y_true = y_true.reshape(-1, 1)

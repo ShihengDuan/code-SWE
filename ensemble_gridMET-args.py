@@ -1,3 +1,4 @@
+# dev test
 import os.path
 import pickle
 
@@ -7,22 +8,22 @@ from torch import nn
 from torch.utils.data import ConcatDataset, DataLoader
 from tqdm import tqdm
 
-from data.SWE_Dataset import gridMETDatasetStation, gridMETDatasetStationAveTemp, gridMETDatasetStationAveRH
+from data.SWE_Dataset import gridMETDatasetStation
+from models.attention import Attention
 from models.lstm import LSTM
-
+from models.tcnn import TCNN
 import argparse
-
+torch.backends.cudnn.benchmark=True # set the optimal algorithm for tasks. 
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--ens', type=int)
     args = vars(parser.parse_args())
     return args
 
-
 def train(model, ds, lr, device=torch.device('cuda:0'), writer=None):
     model = model.train()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    loader = DataLoader(ds, batch_size=128, shuffle=True)
+    loader = DataLoader(ds, batch_size=128, shuffle=True, num_workers=4)
     print('TRAINING')
     for epoch in tqdm(range(50), desc='train-'+str(ens)):
         loss_val = []
@@ -41,12 +42,11 @@ def train(model, ds, lr, device=torch.device('cuda:0'), writer=None):
             optimizer.step()
             loss_val.append(loss.item())
         loss_val = np.mean(loss_val)
-        if writer is not None:
-            writer.add_scalar('training mse', scalar_value=loss_val, global_step=epoch)
         if epoch == 47:
             model2 = model
+        if writer is not None:
+            writer.add_scalar('training mse', scalar_value=loss_val, global_step=epoch)
     return model, model2
-
 
 
 def evaluate(model, ds, device=torch.device('cuda:0')):
@@ -56,8 +56,7 @@ def evaluate(model, ds, device=torch.device('cuda:0')):
     model = model.eval()
     for data in test_dl:
         x_d_new, x_attr, y_new, qts = data
-        x_d_new, x_attr, y_new = x_d_new.to(
-            device), x_attr.to(device), y_new.to(device)
+        x_d_new, x_attr, y_new = x_d_new.to(device), x_attr.to(device), y_new.to(device)
         y_sub = y_new[:, -1:]
         y_hat = model(x_d_new, x_attr)[0]
         y_hat_sub = y_hat[:, -1:, :]
@@ -68,63 +67,81 @@ def evaluate(model, ds, device=torch.device('cuda:0')):
     y_true, y_pred = y_true.flatten(), y_pred.flatten()
     return y_true, y_pred
 
-## get ensemble number from args
 args = get_args()
 ens = args['ens']
 devices = [torch.device('cuda:0'), torch.device('cuda:1'), torch.device('cuda:2'), torch.device('cuda:3')]
 print(ens, ' STARTED')
 
 topo_file = 'SNOTEL/raw_snotel_topo_30m.nc'
+
 WINDOW_SIZE = 180
 RELU_FLAG = False
 LR = 1e-4
 HID = 128
 ENS = 10
 device = devices[ens%4] # device to use from the 4 GPUs. 
-model_type = 'LSTM'
+# model_type = 'LSTM'
+# model_type = 'TCNN'
+model_type = 'Attention'
+KER = 7
+LEVELS = 5
+CHA = 64
 
+head = 16
+num = 3
+forward = 32
+embedding = 32
+# path = '/tempest/duan0000/SWE/gridMET/runs_clean/' + model_type.upper() + '_1e-4_K7L5C64/'
+# path = '/tempest/duan0000/SWE/gridMET/runs_clean/' + model_type.upper() + '_1e-4_H128/'
+# path = '/tempest/duan0000/SWE/gridMET/runs_clean/' + model_type.upper() + '_1e-4_HEAD_16_forward_32_NUM_3_EMBED_32/'
+# path = '/tempest/duan0000/SWE/gridMET/runs_clean/' + model_type.upper() + 'precipRH_forcing/'
+path = 'gridMET/runs_30m/' + model_type.upper() + '/'
+if not os.path.exists(path):
+    os.makedirs(path)
+    print('Make output directory')
+else:
+    print('Folder is here. ')
 loss_fn = nn.MSELoss()
 attributions = ['longitude', 'latitude', 'elevation_prism', 'dah', 'trasp']
 attributions = ['longitude', 'latitude', 'elevation_30m', 'dah_30m', 'trasp_30m']
 forcings = {'pr': 'gridMET/pr_wus_clean.nc', 'rmax': 'gridMET/rmax_wus_clean.nc', 'rmin': 'gridMET/rmin_wus_clean.nc',
             'sph': 'gridMET/sph_wus_clean.nc', 'srad': 'gridMET/srad_wus_clean.nc', 'tmmn': 'gridMET/tmmn_wus_clean.nc',
             'tmmx': 'gridMET/tmmx_wus_clean.nc', 'vpd': 'gridMET/vpd_wus_clean.nc', 'vs': 'gridMET/vs_wus_clean.nc'}
+forcings = {'pr': 'gridMET/pr_wus_clean.nc', 'rmax': 'gridMET/rmax_wus_clean.nc', 'rmin': 'gridMET/rmin_wus_clean.nc'}
 n_inputs = len(attributions) + len(forcings)
 target = ['SWE']
-permute_id = [3, 4, 5, 6, 7, 8] # precip + ave_temperature
-feature = [list(forcings.keys())[i] for i in permute_id]
-print('Permute feature: ', feature)
-path = '/tempest/duan0000/SWE/gridMET/runs_group/' + model_type.upper() + '_1e-4_H128/precip_aveRH/'
-path = 'gridMET/runs_group/' + model_type.upper() + '/precip_RH/'
-if not os.path.isdir(path):
-    os.makedirs(path)
-
 train_ds = []
-for station_id in range(581):
+
+for station_id in range(581):  # 765
     ds = gridMETDatasetStation(forcings=forcings, attributions=attributions, target=target, window_size=WINDOW_SIZE,
-                            mode='TRAIN', topo_file=topo_file, station_id=station_id, permute=True, 
-                            permute_id=permute_id)
+                               mode='TRAIN', topo_file=topo_file, station_id=station_id)
     train_ds.append(ds)
 train_ds = ConcatDataset(train_ds)
 print(train_ds.__len__())
-# for e in range(5, 10):  # ens number
+
 
 print(ens, ' Start')
 if model_type.lower() == 'lstm':
     model = LSTM(hidden_units=HID, input_size=n_inputs, relu_flag=RELU_FLAG)
+elif model_type.lower() == 'tcnn':
+    model = TCNN(kernal_size=KER, num_levels=LEVELS, num_channels=CHA,
+                    input_size=n_inputs)
+elif model_type.lower() == 'attention':
+    model = Attention(num_att_layers=num, dim_feedforward=forward, embedding_size=embedding, n_head=head,
+                        input_size=n_inputs)
 model = model.to(device)
 model1, model2 = train(model, train_ds, LR, device=device)
-torch.save(model1.state_dict(), path  + 'model_ens_' + str(ens))
-torch.save(model2.state_dict(), path  + 'model_ens_' + str(9-ens))
-
+torch.save(model1.state_dict(), path + 'model_ens_' + str(ens))
+torch.save(model2.state_dict(), path + 'model_ens_' + str(9-ens))
 result_true = {}
 result_pred = {}
 result_pred2 = {}
+# for station in range(1, 285):  # or 814
 for station_id in tqdm(range(581), desc='test_ds'):
     ds = gridMETDatasetStation(forcings=forcings, attributions=attributions, target=target,
-                            window_size=WINDOW_SIZE,
-                            mode='TEST', topo_file=topo_file,
-                            station_id=station_id, permute=True, permute_id=permute_id)
+                                window_size=WINDOW_SIZE,
+                                mode='TEST', topo_file=topo_file,
+                                station_id=station_id)
     if ds.__len__() > 0:
         y_true, y_pred = evaluate(model1, ds, device=device)
         y_true = y_true.reshape(-1, 1)
