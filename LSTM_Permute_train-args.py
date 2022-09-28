@@ -70,8 +70,8 @@ def evaluate(model, ds, device=torch.device('cuda:0')):
 args = get_args()
 ens = args['ens']
 # permute_id = args['permuteid']
-permute_id = [1, 2] # Relative humidity
-# permute_id = [5, 6] # temperature
+# permute_id = [1, 2] # Relative humidity
+permute_id = [5, 6] # temperature
 devices = [torch.device('cuda:0'), torch.device('cuda:1'), torch.device('cuda:2'), torch.device('cuda:3')]
 print(ens, ' STARTED')
 print('PERMUTE_ID: ', permute_id)
@@ -104,8 +104,8 @@ topo_file = 'SNOTEL/raw_snotel_topo_30m.nc'
 # Loop through feature permutation
 # for permute_id in range(len(forcings)):
 # feature = list(forcings.keys())[permute_id]
-feature = 'RH'
-# feature = 'Temp'
+# feature = 'RH'
+feature = 'Temp'
 print('Permute feature: ', feature)
 path = 'gridMET/runs_permute_30m/' + model_type.upper() + '/'
 if not os.path.exists(path):

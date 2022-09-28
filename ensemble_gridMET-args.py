@@ -23,7 +23,8 @@ def get_args():
 def train(model, ds, lr, device=torch.device('cuda:0'), writer=None):
     model = model.train()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    loader = DataLoader(ds, batch_size=128, shuffle=True, num_workers=4)
+    loader = DataLoader(ds, batch_size=128, shuffle=True, 
+                        num_workers=4, pin_memory=True)
     print('TRAINING')
     for epoch in tqdm(range(50), desc='train-'+str(ens)):
         loss_val = []
