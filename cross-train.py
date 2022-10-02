@@ -86,18 +86,20 @@ del swe_ds
 loss_fn = nn.MSELoss()
 
 attributions = ['longitude', 'latitude', 'elevation_30m', 'dah_30m', 'trasp_30m']
+attributions = ['longitude', 'latitude', 'elevation_prism', 'dah', 'trasp']
 forcings = {'pr': 'gridMET/pr_wus_clean.nc', 'rmax': 'gridMET/rmax_wus_clean.nc', 'rmin': 'gridMET/rmin_wus_clean.nc',
             'sph': 'gridMET/sph_wus_clean.nc', 'srad': 'gridMET/srad_wus_clean.nc', 'tmmn': 'gridMET/tmmn_wus_clean.nc',
             'tmmx': 'gridMET/tmmx_wus_clean.nc', 'vpd': 'gridMET/vpd_wus_clean.nc', 'vs': 'gridMET/vs_wus_clean.nc'}
 n_inputs = len(attributions) + len(forcings)
 
 topo = 'SNOTEL/raw_snotel_topo_30m.nc'
-save_path = 'mountains/output-all/'
+topo = 'mountains/raw_wus_snotel_topo_clean_mountains.nc'
+save_path = 'mountains_prism/output-all/'
 if not os.path.exists(save_path):
     os.makedirs(save_path, exist_ok=True)
     print('save path created. ')
-model_path = 'mountains/mountain_'+str(mountain_id)+'/'
-if not os.path.exists(save_path):
+model_path = 'mountains_prism/mountain_'+str(mountain_id)+'/'
+if not os.path.exists(model_path):
     os.makedirs(model_path, exist_ok=True)
     print('model path created. ')
 # leave-one-mountain-out cross validation
@@ -134,7 +136,6 @@ for station in tqdm(test_id, desc='testing'):
     ds = gridMETDatasetStation(forcings=forcings, attributions=attributions, target=target, window_size=WINDOW_SIZE,
                                 mode='ALL', topo_file=topo, station_id=station) # mode set to ALL for cross
     if ds.__len__()>0:
-        loader = DataLoader(ds, batch_size=128, shuffle=False)
         y_true, y_pred = evaluate(model1, ds, device=device)
         y_true = y_true.reshape(-1, 1)
         y_pred = y_pred.reshape(-1, 1)
