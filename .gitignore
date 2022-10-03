@@ -49,3 +49,4 @@ epoch=*
 *.ckpt
 *.sh
 *ens*
+lsf-ckpt*
