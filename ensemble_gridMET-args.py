@@ -1,4 +1,5 @@
 # dev test
+from genericpath import exists
 import os.path
 import pickle
 
@@ -17,6 +18,7 @@ torch.backends.cudnn.benchmark=True # set the optimal algorithm for tasks.
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--ens', type=int)
+    parser.add_argument('--device', type=int, default=-1)
     args = vars(parser.parse_args())
     return args
 
@@ -70,6 +72,7 @@ def evaluate(model, ds, device=torch.device('cuda:0')):
 
 args = get_args()
 ens = args['ens']
+device_id = args['device']
 devices = [torch.device('cuda:0'), torch.device('cuda:1'), torch.device('cuda:2'), torch.device('cuda:3')]
 print(ens, ' STARTED')
 
@@ -80,10 +83,13 @@ RELU_FLAG = False
 LR = 1e-4
 HID = 128
 ENS = 10
-device = devices[ens%4] # device to use from the 4 GPUs. 
+if device_id !=-1:
+    device = devices[device_id] # device to use from the 4 GPUs.
+else:
+    device = devices[ens%4] 
 # model_type = 'LSTM'
-# model_type = 'TCNN'
-model_type = 'Attention'
+model_type = 'TCNN'
+# model_type = 'Attention'
 KER = 7
 LEVELS = 5
 CHA = 64
@@ -98,17 +104,18 @@ embedding = 32
 # path = '/tempest/duan0000/SWE/gridMET/runs_clean/' + model_type.upper() + 'precipRH_forcing/'
 path = 'gridMET/runs_30m/' + model_type.upper() + '/'
 if not os.path.exists(path):
-    os.makedirs(path)
+    os.makedirs(path, exist_ok=True)
     print('Make output directory')
 else:
     print('Folder is here. ')
 loss_fn = nn.MSELoss()
 attributions = ['longitude', 'latitude', 'elevation_prism', 'dah', 'trasp']
 attributions = ['longitude', 'latitude', 'elevation_30m', 'dah_30m', 'trasp_30m']
+# attributions = ['latitude', 'elevation_30m']
 forcings = {'pr': 'gridMET/pr_wus_clean.nc', 'rmax': 'gridMET/rmax_wus_clean.nc', 'rmin': 'gridMET/rmin_wus_clean.nc',
             'sph': 'gridMET/sph_wus_clean.nc', 'srad': 'gridMET/srad_wus_clean.nc', 'tmmn': 'gridMET/tmmn_wus_clean.nc',
             'tmmx': 'gridMET/tmmx_wus_clean.nc', 'vpd': 'gridMET/vpd_wus_clean.nc', 'vs': 'gridMET/vs_wus_clean.nc'}
-forcings = {'pr': 'gridMET/pr_wus_clean.nc', 'rmax': 'gridMET/rmax_wus_clean.nc', 'rmin': 'gridMET/rmin_wus_clean.nc'}
+# forcings = {'pr': 'gridMET/pr_wus_clean.nc', 'tave': 'gridMET/tave_wus_clean.nc'}
 n_inputs = len(attributions) + len(forcings)
 target = ['SWE']
 train_ds = []
