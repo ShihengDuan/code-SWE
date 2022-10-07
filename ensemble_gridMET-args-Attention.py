@@ -8,7 +8,7 @@ from torch import nn
 from torch.utils.data import ConcatDataset, DataLoader
 from tqdm import tqdm
 
-from data.SWE_Dataset import gridMETDatasetStation
+from data.SWE_Dataset import gridMETDatasetStation, gridMETRelativeStation
 from models.attention import Attention
 from models.lstm import LSTM
 from models.tcnn import TCNN
@@ -19,6 +19,7 @@ def get_args():
     parser.add_argument('--ens', type=int)
     parser.add_argument('--device', type=int, default=-1)
     parser.add_argument('--resume', type=int, default=0)
+    parser.add_argument('--relative', type=int, default=-1)
     args = vars(parser.parse_args())
     return args
 
@@ -84,7 +85,7 @@ device_id = args['device']
 devices = [torch.device('cuda:0'), torch.device('cuda:1'), torch.device('cuda:2'), torch.device('cuda:3')]
 print(ens, ' STARTED')
 resume = args['resume']
-
+relative = args['relative']
 
 topo_file = 'SNOTEL/raw_snotel_topo_30m.nc'
 
@@ -112,7 +113,10 @@ embedding = 32
 # path = '/tempest/duan0000/SWE/gridMET/runs_clean/' + model_type.upper() + '_1e-4_H128/'
 # path = '/tempest/duan0000/SWE/gridMET/runs_clean/' + model_type.upper() + '_1e-4_HEAD_16_forward_32_NUM_3_EMBED_32/'
 # path = '/tempest/duan0000/SWE/gridMET/runs_clean/' + model_type.upper() + 'precipRH_forcing/'
-path = 'gridMET/runs_30m/' + model_type.upper() + '/'
+if relative >0: 
+    path = 'gridMET/runs_30m_relative/' + model_type.upper() + '/'
+else:
+    path = 'gridMET/runs_30m/' + model_type.upper() + '/'
 if not os.path.exists(path):
     os.makedirs(path, exist_ok=True)
     print('Make output directory')
@@ -129,11 +133,16 @@ forcings = {'pr': 'gridMET/pr_wus_clean.nc', 'rmax': 'gridMET/rmax_wus_clean.nc'
 n_inputs = len(attributions) + len(forcings)
 target = ['SWE']
 train_ds = []
-
-for station_id in range(581):  # 765
-    ds = gridMETDatasetStation(forcings=forcings, attributions=attributions, target=target, window_size=WINDOW_SIZE,
-                               mode='TRAIN', topo_file=topo_file, station_id=station_id)
-    train_ds.append(ds)
+if relative>0:
+    for station_id in range(581):  # 765
+        ds = gridMETRelativeStation(forcings=forcings, attributions=attributions, target=target, window_size=WINDOW_SIZE,
+                                mode='TRAIN', topo_file=topo_file, station_id=station_id)
+        train_ds.append(ds)
+else:
+    for station_id in range(581):  # 765
+        ds = gridMETDatasetStation(forcings=forcings, attributions=attributions, target=target, window_size=WINDOW_SIZE,
+                                mode='TRAIN', topo_file=topo_file, station_id=station_id)
+        train_ds.append(ds)
 train_ds = ConcatDataset(train_ds)
 print(train_ds.__len__())
 
@@ -167,10 +176,16 @@ result_pred = {}
 result_pred2 = {}
 # for station in range(1, 285):  # or 814
 for station_id in tqdm(range(581), desc='test_ds'):
-    ds = gridMETDatasetStation(forcings=forcings, attributions=attributions, target=target,
-                                window_size=WINDOW_SIZE,
-                                mode='TEST', topo_file=topo_file,
-                                station_id=station_id)
+    if relative>0:
+        ds = gridMETRelativeStation(forcings=forcings, attributions=attributions, target=target,
+                                    window_size=WINDOW_SIZE,
+                                    mode='TEST', topo_file=topo_file,
+                                    station_id=station_id)
+    else:
+        ds = gridMETDatasetStation(forcings=forcings, attributions=attributions, target=target,
+                                    window_size=WINDOW_SIZE,
+                                    mode='TEST', topo_file=topo_file,
+                                    station_id=station_id)
     if ds.__len__() > 0:
         y_true, y_pred = evaluate(model1, ds, device=device)
         y_true = y_true.reshape(-1, 1)
