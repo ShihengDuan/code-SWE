@@ -48,5 +48,5 @@ events*
 epoch=*
 *.ckpt
 *.sh
-*ens*
+*_ens_*
 lsf-ckpt*
