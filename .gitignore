@@ -50,3 +50,4 @@ epoch=*
 *.sh
 *_ens_*
 lsf-ckpt*
+*.png

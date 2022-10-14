@@ -24,6 +24,6 @@ Sierra Nevada: 35.5N-39.5N, 120.5W-118W
 Northern Rocky (Wyoming): 42N-47N, 116.5W-108.5W    
 Cascade: 41N-49N, 123W-120W    
 Western Rocky (Utah): 37N-41.5N, 114W-109W    
-![Mountains](Mountains.png, "MountainRanges")    
+![Mountains](./Mountains.png, "MountainRanges")    
 
 
