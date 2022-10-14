@@ -17,3 +17,11 @@ Files begin with ```ensemble``` performe initial-weight ensemble run for the dee
 Associated model weights and outputs: 10.5281/zenodo.6419931 and 10.5281/zenodo.6430612 
 
 
+# Major Mountain Ranges
+
+Southern Rocky (Colorado): 35N-42N, 109W-104.5W    
+Sierra Nevada: 35.5N-39.5N, 120.5W-118W    
+Northern Rocky (Wyoming): 42N-47N, 116.5W-108.5W    
+Cascade: 41N-49N, 123W-120W    
+Western Rocky (Utah): 37N-41.5N, 114W-109W    
+
