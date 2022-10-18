@@ -14,7 +14,11 @@ Files begin with ```ensemble``` performe initial-weight ensemble run for the dee
 ```NSIDC``` is used to process NSIDC-UA dataset and ```ExtraGirdMet``` is extrapolation over the Rocky Mountains. 
 
 
-Associated model weights and outputs: 10.5281/zenodo.6419931 and 10.5281/zenodo.6430612 
+Associated model weights and outputs: 10.5281/zenodo.6419931 and 10.5281/zenodo.6430612   
+
+```gridMET/runs_``` are model weights and results. ```runs_30m_mountains``` is for the LSTM model trained with stations (530) inside mountain ranges. 
+
+
 
 
 # Major Mountain Ranges
@@ -27,5 +31,4 @@ Western Rocky (Utah): 37N-41.5N, 114W-109W
 ![Mountains](https://github.com/ShihengDuan/code-SWE/blob/dev/Mountains.png?raw=true, "MountainRanges")    
 
 
-```gridMET/runs_``` are model weights and results. ```runs_30m_mountains``` is for the LSTM model trained with stations (530) inside mountain ranges. 
 
