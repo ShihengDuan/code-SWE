@@ -27,3 +27,5 @@ Western Rocky (Utah): 37N-41.5N, 114W-109W
 ![Mountains](https://github.com/ShihengDuan/code-SWE/blob/dev/Mountains.png?raw=true, "MountainRanges")    
 
 
+```gridMET/runs_``` are model weights and results. ```runs_30m_mountains``` is for the LSTM model trained with stations (530) inside mountain ranges. 
+
