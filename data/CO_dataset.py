@@ -198,9 +198,9 @@ class CO_LOCADataset(Dataset):  # lat 112, lon 72
         for forcing in forcings:
             forcing_data = xa.open_dataarray(forcings[forcing])
             if scenario == 'hist':
-                forcing_data = forcing_data.sel(time=slice('1981-10-01', '2001-09-30'))
+                forcing_data = forcing_data.sel(time=slice('1951-10-01', '2005-09-30')) # extended period. 
             else:
-                forcing_data = forcing_data.sel(time=slice('2071-10-01', '2091-09-30'))
+                forcing_data = forcing_data.sel(time=slice('2006-10-01', '2091-09-30'))
             forcing_data = forcing_data.isel(lat=lat)  # select the point.
             forcing_data = (forcing_data - self.scaler_mean[forcing]) / self.scaler_std[forcing]
             self.forcings.append(forcing_data)
