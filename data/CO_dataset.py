@@ -187,6 +187,8 @@ class COgridMETDataset(Dataset):  # lat 168, lon 108
 
 
 class CO_LOCADataset(Dataset):  # lat 112, lon 72
+    # Precipitation from LOCA is in kg m-2 s-1, which is 86400 mm/day. 
+    # Should change units before feeding into this Dataset. 
     def __init__(self, forcings: Dict, topo_file, attributions, lat, window_size=180, scenario='hist',
                  scaler_mean='/tempest/duan0000/SWE/gridMET/Rocky/gridmet_mean.nc',
                  scaler_std='/tempest/duan0000/SWE/gridMET/Rocky/gridmet_std.nc'):
