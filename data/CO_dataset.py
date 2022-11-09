@@ -189,7 +189,8 @@ class COgridMETDataset(Dataset):  # lat 168, lon 108
 class CO_LOCADataset(Dataset):  # lat 112, lon 72
     # Precipitation from LOCA is in kg m-2 s-1, which is 86400 mm/day. 
     # Should change units before feeding into this Dataset. 
-    def __init__(self, forcings: Dict, topo_file, attributions, lat, window_size=180, scenario='hist',
+    def __init__(self, forcings: Dict, topo_file, attributions, lat, window_size=180, 
+                 scenario='hist', adjust_unit=True, 
                  scaler_mean='/tempest/duan0000/SWE/gridMET/Rocky/gridmet_mean.nc',
                  scaler_std='/tempest/duan0000/SWE/gridMET/Rocky/gridmet_std.nc'):
         super(CO_LOCADataset, self).__init__()
@@ -204,6 +205,10 @@ class CO_LOCADataset(Dataset):  # lat 112, lon 72
             else:
                 forcing_data = forcing_data.sel(time=slice('2006-01-01', '2091-09-30'))
             forcing_data = forcing_data.isel(lat=lat)  # select the point.
+            # adjust LOCA unit here
+            if forcing=='pr' and adjust_unit==True:
+                print('Unit adjusted : ', forcing)
+                forcing_data = forcing_data * 86400
             forcing_data = (forcing_data - self.scaler_mean[forcing]) / self.scaler_std[forcing]
             self.forcings.append(forcing_data)
         attribution = xa.open_dataset(topo_file)
