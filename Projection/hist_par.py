@@ -3,7 +3,7 @@ import inspect
 import os
 import sys
 import warnings
-
+import json
 import numpy as np
 import torch
 from torch.multiprocessing import Pool, set_start_method
@@ -20,11 +20,11 @@ from models.tcnn import TCNN
 from models.attention import Attention
 
 
-def get_args():
+def get_args(): # determine the ensemble nnumber, CMIP model, and mountain area. 
     parser = argparse.ArgumentParser()
     parser.add_argument('--ens', type=int)
     parser.add_argument('--device', type=int, default=-1)
-    parser.add_argument('--model', type=str, default='lstm')
+    parser.add_argument('--model', type=str, default='CanESM2')
     parser.add_argument('--mountain', type=str, default='rocky')
     ## Mountain: Rocky, Sierra, Northern, Western, Cascade
     args = vars(parser.parse_args())
@@ -35,7 +35,16 @@ ens = args['ens']
 # model_type = 'TCNN'
 model_type = 'LSTM'
 # model_type = 'Attention'
-path = 'LSTM_proj/'
+# path = 'LSTM_proj_max_L1_simple/'
+# path = 'LSTM_proj_max_L2/'
+# path = 'LSTM_proj_median_L1/'
+# path = 'LSTM_proj_median_L2/'
+# path = 'LSTM_proj_median_L3/'
+# path = 'LSTM_proj_max_L3_simple/'
+path = 'LSTM_proj_median_L3_simple/'
+path = 'LSTM_proj_max_L1_simSta/'
+
+print('PATH: ', path)
 
 device_id = args['device']
 devices = [torch.device('cuda:0'), torch.device('cuda:1'), torch.device('cuda:2'), torch.device('cuda:3')]
@@ -72,28 +81,60 @@ head = 16
 num = 3
 forward = 32
 embedding = 32
-# model = 'CanESM2'
 model = args['model']
-attributions = ['longitude', 'latitude', 'elevation_prism', 'dah', 'trasp']
-forcings = {'pr': model + '-hist-pr.nc', 'rave': model + '-hist-rave.nc',
-            'sph': model + '-hist-sph.nc', 'srad': model + '-hist-srad.nc', 'tmmn': model + '-hist-tmmn.nc',
-            'tmmx': model + '-hist-tmmx.nc', 'vs': model + '-hist-vs.nc'}
+# attributions = ['longitude', 'latitude', 'elevation_prism', 'dah', 'trasp']
+attributions = ['longitude', 'latitude', 'elevation_30m', 'dah_30m', 'trasp_30m']
+attributions = ['longitude', 'latitude', 'elevation_30m']
 
+'''forcings = {'pr': model + '-hist-pr.nc', 'rave': model + '-hist-rave.nc',
+            'sph': model + '-hist-sph.nc', 'srad': model + '-hist-srad.nc', 'tmmn': model + '-hist-tmmn.nc',
+            'tmmx': model + '-hist-tmmx.nc', 'vs': model + '-hist-vs.nc'}'''
+forcings = {'pr': '../LOCA/'+model+'/pr_'+mountain+'_1981-2100.nc', 
+            'rave': '../LOCA/'+model+'/relHumid_'+mountain+'_1981-2100.nc',
+            'sph': '../LOCA/'+model+'/Qair_'+mountain+'_1981-2100.nc',
+            'srad': '../LOCA/'+model+'/shortwave_in_'+mountain+'_1981-2100.nc',
+            'tmmn': '../LOCA/'+model+'/tasmax_'+mountain+'_1981-2100.nc',
+            'tmmx': '../LOCA/'+model+'/tasmin_'+mountain+'_1981-2100.nc',
+            'vs': '../LOCA/'+model+'/windspeed_'+mountain+'_1981-2100.nc',
+            }
+'''forcings = {'pr': '../LOCA/'+model+'/pr_'+mountain+'_1981-2100.nc', 
+            'srad': '../LOCA/'+model+'/shortwave_in_'+mountain+'_1981-2100.nc',
+            'tmmn': '../LOCA/'+model+'/tasmax_'+mountain+'_1981-2100.nc',
+            'tmmx': '../LOCA/'+model+'/tasmin_'+mountain+'_1981-2100.nc',
+            }'''
 n_inputs = len(attributions) + len(forcings)
 # topo_file = 'topo_file_LOCA.nc'
 
 # topo_file = 'topo_file_LOCA_regrid.nc'
-topo_file = 
+topo_file = '../LOCA/'+ mountain + '_topo_file_30m.nc'
+# mod_prefix = '../gridMET/runs_relative_proj_30m_L2/LSTM_median_1/model_ens_'
+# mod_prefix = '../gridMET/runs_relative_proj_30m_L2/LSTM/model_ens_'
+# mod_prefix = '../gridMET/runs_relative_proj_30m_L3/LSTM_median_1/11-13-15-15-32/model_ens_'
+# mod_prefix = '../gridMET/runs_relative_proj_30m_L3/LSTM_median_0/11-13-15-15-32/model_ens_'
+# mod_prefix = '../gridMET/runs_relative_proj_30m_L3/LSTM_median_0/11-13-16-07-39/model_ens_'
+# mod_prefix = '../gridMET/runs_relative_proj_30m_L3/LSTM_median_1/11-13-16-07-35/model_ens_'
+mod_prefix = '../gridMET/runs_relative_proj_30m_L1/LSTM_median_0/11-19-16-11-01/model_ens_'
+
+config = {'model_prefix': mod_prefix, 'forcings': forcings, 
+          'path':path, 'attribution': attributions,
+         }
+with open(path+'config.json', 'w') as fp:
+    json.dump(config, fp)
 
 def inference(lat_id, device=device):
     ds = CO_LOCADataset(forcings=forcings, lat=lat_id, attributions=attributions, topo_file=topo_file,
-                        window_size=180, scenario='hist',
+                        window_size=180, scenario='hist', adjust_unit=True, 
                         scaler_mean='../gridMET/Rocky/gridmet_mean_norm.nc', # this is mean from SNOTEL stations. should be static. 
                         scaler_std='../gridMET/Rocky/gridmet_std_norm.nc')
     if model_type == 'LSTM':
         model = LSTM(hidden_units=HID, input_size=n_inputs, relu_flag=RELU_FLAG)
         # model_path = '/tempest/duan0000/SWE/gridMET/runs_relative_proj/LSTM_1e-4/model_ens_' + str(ens)
-        model_path = '../gridMET/runs/runs_30m_relative_median/LSTM/model_ens_' + str(ens)
+        # model_path = '../gridMET/runs_relative_proj_30m_L2/LSTM/model_ens_' + str(ens)
+        model_path = mod_prefix + str(ens)
+        # model_path = '../gridMET/runs_relative_proj_30m_L1/LSTM_median_1/model_ens_' + str(ens)
+        # model_path = '../gridMET/runs_relative_proj_30m_L1/LSTM_median_0/model_ens_' + str(ens)
+        # model_path = '../gridMET/runs_relative_proj_30m_L1/LSTM_median_0/11-07-20-07-40/model_ens_' + str(ens)
+        print('model_path: ', model_path)
     elif model_type == 'TCNN':
         model = TCNN(kernal_size=KER, num_levels=LEVELS, num_channels=CHA, input_size=n_inputs)
         model_path = '/tempest/duan0000/SWE/gridMET/runs_relative_clean/TCNN_1e-4/model_ens_' + str(ens)
@@ -113,7 +154,7 @@ def inference(lat_id, device=device):
         y_hat_sub = y_hat[:, -1:, :]
         pred.append(y_hat_sub.to('cpu').data.numpy())
     pred = np.concatenate(pred).flatten()
-    np.save(path + str(lat_id) + '_' + str(ens), pred)
+    # np.save(path + str(lat_id) + '_' + str(ens), pred)
     return lat_id, pred
 
 
@@ -124,7 +165,7 @@ if __name__ == '__main__':
     except RuntimeError:
         pass
 
-    prediction = np.empty((num_lat, num_lon, 7126))
+    prediction = np.empty((num_lat, num_lon, 8860))
 
     with Pool(4) as pool:
         lat_ids = np.arange(num_lat)
@@ -134,4 +175,4 @@ if __name__ == '__main__':
             # print(lat, ' ', len(pred), ' ', len(pred) / 108, ' ', split_data[0].shape)
             for i in range(num_lon):
                 prediction[lat, i] = split_data[i]
-    np.save(path + model + '-hist_' + str(ens), prediction)
+    np.save(path + model + '-' + mountain + '-hist_' + str(ens), prediction)
