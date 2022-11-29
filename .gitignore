@@ -51,3 +51,4 @@ epoch=*
 *_ens_*
 lsf-ckpt*
 *.png
+*.json
