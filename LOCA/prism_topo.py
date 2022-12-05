@@ -34,15 +34,15 @@ for mountain in mountains:
             longitude[i, j] = lon
             latitude[i, j] = lat
             # ele_station = ele.sel(y=lat, x=lon, method='nearest').data[0]
-            ele_station = prism_topo.elevation_prism.sel(lat=slice(lat+0.03, lat-0.03), lon=slice(lon-0.03, lon+0.03)).mean(skipna=True).data
-            elevation_ave[i, j] = ele_station
+            ele_station = prism_topo.elevation_prism.sel(lat=slice(lat-0.03, lat+0.03), lon=slice(lon-0.03, lon+0.03))
+            elevation_ave[i, j] = ele_station.mean(skipna=True).data
             elevation_nn[i, j] = prism_topo.elevation_prism.sel(lat=lat, lon=lon, method='nearest').data
 
-            dah_station = prism_topo.dah.sel(lat=slice(lat+0.03, lat-0.03), lon=slice(lon-0.03, lon+0.03)).mean(skipna=True).data
+            dah_station = prism_topo.dah.sel(lat=slice(lat-0.03, lat+0.03), lon=slice(lon-0.03, lon+0.03)).mean(skipna=True).data
             dah_ave[i, j] = dah_station
             dah_nn[i, j] = prism_topo.dah.sel(lat=lat, lon=lon, method='nearest').data
 
-            trasp_station = prism_topo.trasp.sel(lat=slice(lat+0.03, lat-0.03), lon=slice(lon-0.03, lon+0.03)).mean(skipna=True).data
+            trasp_station = prism_topo.trasp.sel(lat=slice(lat-0.03, lat+0.03), lon=slice(lon-0.03, lon+0.03)).mean(skipna=True).data
             trasp_ave[i, j] = trasp_station
             trasp_nn[i, j] = prism_topo.trasp.sel(lat=lat, lon=lon, method='nearest').data
             
