@@ -35,6 +35,6 @@ class L12loss(torch.nn.Module):
     def forward(self, y_hat, y, ymin=0):
         ind = y>ymin
         L1 = torch.sum(torch.abs((y_hat-y)*(~ind)))
-        L2 = torch.sum(torch.square((y_hat-y)*ind))
+        L2 = torch.sqrt(torch.sum(torch.square((y_hat-y)*ind)))
         loss = (L1+L2)/y_hat.nelement()
         return loss

@@ -25,6 +25,8 @@ def get_args():
     parser.add_argument('--ens', type=int)
     parser.add_argument('--device', type=int, default=-1)
     parser.add_argument('--model', type=str, default='lstm')
+    parser.add_argument('--mountain', type=str, default='rocky')
+    ## Mountain: Rocky, Sierra, Northern, Western, Cascade
     args = vars(parser.parse_args())
     return args
 
@@ -33,6 +35,25 @@ ens = args['ens']
 device_id = args['device']
 devices = [torch.device('cuda:0'), torch.device('cuda:1'), torch.device('cuda:2'), torch.device('cuda:3')]
 print(ens, ' STARTED')
+mountain = args['mountain']
+if mountain.upper()=='ROCKY':
+    num_lat = 168
+    num_lon = 108
+elif mountain.upper()=='SIERRA':
+    num_lat = 108
+    num_lon = 96
+elif mountain.upper()=='CASCADE':
+    num_lat = 199
+    num_lon = 73
+elif mountain.upper()=='NORTH':
+    num_lat = 134
+    num_lon = 211
+elif mountain.upper()=='UTAH':
+    num_lat = 118
+    num_lon = 130
+else:
+    print('Mountain Not Supported! Go back and write your code. ')
+
 if device_id !=-1:
     device = devices[device_id] # device to use from the 4 GPUs.
 else:
@@ -45,7 +66,9 @@ if model_type=='ATTENTION':
     pool_size=2
 else:
     pool_size=4
-path = model_type.upper()+'_ori_lats/'
+
+# Modify result directory here
+path = mountain.upper() + '_' + model_type.upper() + '_rel_lats/'
 if not os.path.exists(path):
     os.makedirs(path, exist_ok=True)
 HID = 128
@@ -61,25 +84,35 @@ embedding = 32
 
 attributions = ['longitude', 'latitude', 'elevation_prism', 'dah', 'trasp']
 attributions = ['longitude', 'latitude', 'elevation_30m', 'dah_30m', 'trasp_30m']
-forcings = {'pr': '../gridMET/Rocky/pr_1980_2018.nc', 'rmax': '../gridMET/Rocky/rmax_1980_2018.nc',
-            'rmin': '../gridMET/Rocky/rmin_1980_2018.nc', 'sph': '../gridMET/Rocky/sph_1980_2018.nc',
-            'srad': '../gridMET/Rocky/srad_1980_2018.nc', 'tmmn': '../gridMET/Rocky/tmmn_1980_2018.nc',
-            'tmmx': '../gridMET/Rocky/tmmx_1980_2018.nc', 'vpd': '../gridMET/Rocky/vpd_1980_2018.nc',
-            'vs': '../gridMET/Rocky/vs_1980_2018.nc'}
+if mountain.upper()=='ROCKY':
+    forcings = {'pr': '../gridMET/Rocky/pr_1980_2018.nc', 'rmax': '../gridMET/Rocky/rmax_1980_2018.nc',
+                'rmin': '../gridMET/Rocky/rmin_1980_2018.nc', 'sph': '../gridMET/Rocky/sph_1980_2018.nc',
+                'srad': '../gridMET/Rocky/srad_1980_2018.nc', 'tmmn': '../gridMET/Rocky/tmmn_1980_2018.nc',
+                'tmmx': '../gridMET/Rocky/tmmx_1980_2018.nc', 'vpd': '../gridMET/Rocky/vpd_1980_2018.nc',
+                'vs': '../gridMET/Rocky/vs_1980_2018.nc'}
+else:
+    forcings = {'pr': '../gridMET/'+mountain.upper()+'/'+mountain.lower()+'_pr_1980_2018.nc', 'rmax': '../gridMET/'+mountain.upper()+'/'+mountain.lower()+'_rmax_1980_2018.nc',
+                'rmin': '../gridMET/'+mountain.upper()+'/'+mountain.lower()+'_rmin_1980_2018.nc', 'sph': '../gridMET/'+mountain.upper()+'/'+mountain.lower()+'_sph_1980_2018.nc',
+                'srad': '../gridMET/'+mountain.upper()+'/'+mountain.lower()+'_srad_1980_2018.nc', 'tmmn': '../gridMET/'+mountain.upper()+'/'+mountain.lower()+'_tmmn_1980_2018.nc',
+                'tmmx': '../gridMET/'+mountain.upper()+'/'+mountain.lower()+'_tmmx_1980_2018.nc', 'vpd': '../gridMET/'+mountain.upper()+'/'+mountain.lower()+'_vpd_1980_2018.nc',
+                'vs': '../gridMET/'+mountain.upper()+'/'+mountain.lower()+'_vs_1980_2018.nc'}
 n_inputs = len(attributions) + len(forcings)
-topo_file = '../gridMET/Rocky/topo_file_30m.nc'
-
+if mountain.upper()=='ROCKY':
+    topo_file = '../gridMET/Rocky/topo_file_30m.nc'
+else:
+    topo_file = '../gridMET/'+mountain.upper()+'/'+mountain.lower()+'_topo_file_30m.nc'
 
 def inference(lat_id, device=device):
     ds = COgridMETDataset(forcings=forcings, lat=lat_id, attributions=attributions, topo_file=topo_file,
                           window_size=180,
-                          scaler_mean='../gridMET/Rocky/gridmet_mean_norm.nc',
+                          scaler_mean='../gridMET/Rocky/gridmet_mean_norm.nc', # this is mean from SNOTEL stations. should be static. 
                           scaler_std='../gridMET/Rocky/gridmet_std_norm.nc')
     if model_type == 'LSTM':
         model = LSTM(hidden_units=HID, input_size=n_inputs, relu_flag=RELU_FLAG)
         # model_path = '/tempest/duan0000/SWE/gridMET/runs_relative_clean/LSTM_1e-4H128_NORELU/model_ens_' + str(ens)
         model_path = '../gridMET/runs_30m_relative/LSTM/model_ens_' + str(ens)
-        model_path = '../gridMET/runs_30m/LSTM/model_ens_' + str(ens)
+        # model_path = '../gridMET/runs_30m/LSTM/model_ens_' + str(ens)
+        # model_path = '../gridMET/runs_30m_relative_median/LSTM/model_ens_' + str(ens)
     elif model_type == 'TCNN':
         model = TCNN(kernal_size=KER, num_levels=LEVELS, num_channels=CHA, input_size=n_inputs)
         # model_path = '/tempest/duan0000/SWE/gridMET/runs_relative_clean/TCNN_1e-4/model_ens_' + str(ens)
@@ -114,14 +147,14 @@ if __name__ == '__main__':
     except RuntimeError:
         pass
 
-    prediction = np.empty((168, 108, 3473))
+    prediction = np.empty((num_lat, num_lon, 3473))
 
     with Pool(pool_size) as pool:
-        lat_ids = np.arange(168)
+        lat_ids = np.arange(num_lat)
         for results in tqdm(pool.imap(inference, lat_ids), total=len(lat_ids), position=0):
             lat, pred = results
-            split_data = np.split(pred, 108)
+            split_data = np.split(pred, num_lon)
             # print(lat, ' ', len(pred), ' ', len(pred) / 108, ' ', split_data[0].shape)
-            for i in range(108):
+            for i in range(num_lon):
                 prediction[lat, i] = split_data[i]
     np.save(path + 'prediction_' + str(ens), prediction)
