@@ -66,7 +66,6 @@ def evaluate(model, ds, device=torch.device('cuda:0')):
     y_true, y_pred = y_true.flatten(), y_pred.flatten()
     return y_true, y_pred
 
-kf = KFold(n_splits=5, shuffle=True, random_state=42)
 station_ids = np.arange(581)
 
 args = get_args()
@@ -75,11 +74,23 @@ fold_id = args['fold']
 devices = [torch.device('cuda:0'), torch.device('cuda:1'), torch.device('cuda:2'), torch.device('cuda:3')]
 print(ens, ' STARTED')
 print('Fold: ', fold_id)
-
-for i, (train_index, test_index) in enumerate(kf.split(station_ids)):
+# Get mountain SNOTELs
+mountain_ids = []
+swe_ds = xa.open_dataset(
+    'mountains/raw_wus_snotel_topo_clean_mountains.nc')
+mountains = swe_ds.mountain
+del swe_ds
+for station in range(581):
+    label = mountains.isel(n_stations=station)
+    if label != -1:  # mountain sample
+        mountain_ids.append(station)
+print(len(mountain_ids), ' mountain_snotels')
+mountain_ids_array = np.array(mountain_ids)
+kf = KFold(n_splits=8, shuffle=True, random_state=42) # split into 8 fold to keep similar with 8 mountains. 
+for i, (train_index, test_index) in enumerate(kf.split(mountain_ids)):
     if i==fold_id:
-        station_train = train_index
-        station_test = test_index
+        station_train = mountain_ids_array[train_index]
+        station_test = mountain_ids_array[test_index]
 print(len(station_train))
 print(len(station_test))
 
@@ -102,11 +113,11 @@ n_inputs = len(attributions) + len(forcings)
 
 topo = 'SNOTEL/raw_snotel_topo_30m.nc'
 # topo = 'mountains/raw_wus_snotel_topo_clean_mountains.nc'
-save_path = 'cross-fold/output-all/'
+save_path = 'cross-fold8-mountain/output-all/'
 if not os.path.exists(save_path):
     os.makedirs(save_path, exist_ok=True)
     print('save path created. ')
-model_path = 'cross-fold/fold_'+str(fold_id)+'/'
+model_path = 'cross-fold8-mountain/fold_'+str(fold_id)+'/'
 if not os.path.exists(model_path):
     os.makedirs(model_path, exist_ok=True)
     print('model path created. ')
