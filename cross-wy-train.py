@@ -3,10 +3,10 @@ from tqdm import tqdm
 from torch.utils.data import DataLoader, ConcatDataset
 from models.lstm import LSTM
 import xarray as xa
-from data.SWE_Dataset import gridMETDatasetStation
+from data.SWE_Dataset import gridMETDatasetStationWY
 import os
 from torch import nn
-from sklearn.model_selection import KFold
+import pickle
 
 import torch
 import argparse
@@ -14,7 +14,7 @@ import argparse
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--ens', type=int)
-    parser.add_argument('--fold', type=int)
+    parser.add_argument('--train', type=str)
     args = vars(parser.parse_args())
     return args
 
@@ -70,36 +70,37 @@ station_ids = np.arange(581)
 
 args = get_args()
 ens = args['ens']
-fold_id = args['fold']
+hot_cool = args['train']
 devices = [torch.device('cuda:0'), torch.device('cuda:1'), torch.device('cuda:2'), torch.device('cuda:3')]
 print(ens, ' STARTED')
-print('Fold: ', fold_id)
-# Get mountain SNOTELs
-mountain_ids = []
-swe_ds = xa.open_dataset(
-    'mountains/raw_wus_snotel_topo_clean_mountains.nc')
-mountains = swe_ds.mountain
-del swe_ds
-for station in range(581):
-    label = mountains.isel(n_stations=station)
-    if label != -1:  # mountain sample
-        mountain_ids.append(station)
-print(len(mountain_ids), ' mountain_snotels')
-mountain_ids_array = np.array(mountain_ids)
-kf = KFold(n_splits=8, shuffle=True, random_state=42) # split into 8 fold to keep similar with 8 mountains. 
-for i, (train_index, test_index) in enumerate(kf.split(mountain_ids)):
-    if i==fold_id:
-        station_train = mountain_ids_array[train_index]
-        station_test = mountain_ids_array[test_index]
-print(len(station_train))
-print(len(station_test))
+
+# Get cold and hot WY
+tmin = xa.open_dataarray('gridMET/tmmn_wus_clean.nc')
+tmax = xa.open_dataarray('gridMET/tmmx_wus_clean.nc')
+tmean = (tmin+tmax)/2
+wy_temp = []
+wys = np.arange(1982, 2018)
+for wy in range(1982, 2018):
+    wy_temp.append(tmean.sel(time=slice(str(wy-1)+'-10-01', str(wy)+'-09-30')).mean())
+sorted_wys = [wy for _, wy in sorted(zip(wy_temp, wys))]
+print(wys)
+print(sorted_wys) # should be from coolest to hottest. 
+print(wy_temp) 
+if hot_cool.upper()=='HOT':
+    train_wys = sorted_wys[10:]
+    test_wys = sorted_wys[:10]
+elif hot_cool.upper()=='COOL':
+    train_wys = sorted_wys[:-10]
+    test_wys = sorted_wys[-10:]
+else:
+    print('NOT Valid')
 
 WINDOW_SIZE = 180
 model_type = 'lstm'
 LR = 1e-4
 HID = 128
 ENS = 10
-device = devices[(ens+fold_id)%4] # device to use from the 4 GPUs. 
+device = devices[ens%4] # device to use from the 4 GPUs. 
 target = ['SWE']
 
 loss_fn = nn.MSELoss()
@@ -113,23 +114,35 @@ n_inputs = len(attributions) + len(forcings)
 
 topo = 'SNOTEL/raw_snotel_topo_30m.nc'
 # topo = 'mountains/raw_wus_snotel_topo_clean_mountains.nc'
-save_path = 'cross-fold8-mountain/output-all/'
+tmp_data = xa.open_dataset(topo)
+target_mean = tmp_data.SWE.mean().data
+target_std = tmp_data.SWE.std().data
+
+save_path = 'cross-wy/'+hot_cool.upper()+'/'
 if not os.path.exists(save_path):
     os.makedirs(save_path, exist_ok=True)
     print('save path created. ')
-model_path = 'cross-fold8-mountain/fold_'+str(fold_id)+'/'
+model_path = 'cross-wy/'+hot_cool.upper()+'/'
 if not os.path.exists(model_path):
     os.makedirs(model_path, exist_ok=True)
     print('model path created. ')
 
 
-print(len(station_train), ' stations for training')
-print(len(station_test), ' stations for testing')
+print(len(train_wys), ' wys for training')
+print(len(test_wys), ' wys for testing')
+
+# Load helper
+with open(save_path+'helper.p', 'rb') as pfile:
+    helper = pickle.load(pfile)
 
 train_ds = []
-for station in tqdm(station_train, desc='train ds'):
-    ds = gridMETDatasetStation(forcings=forcings, attributions=attributions, target=target, window_size=WINDOW_SIZE,
-                                mode='ALL', topo_file=topo, station_id=station) # mode set to ALL for cross
+for station in tqdm(station_ids, desc='train ds'):
+    ds = gridMETDatasetStationWY(forcings=forcings, attributions=attributions, target=target, window_size=WINDOW_SIZE,
+                                mode='train', topo_file=topo, station_id=station,
+                                helper=helper,
+                                train_wy=train_wys, test_wy=test_wys,
+                                target_mean=target_mean, target_std=target_std,
+                                ) # mode set to ALL for cross
     train_ds.append(ds)
 
 train_ds = ConcatDataset(train_ds)
@@ -143,9 +156,13 @@ torch.save(model1.state_dict(), model_path  + 'model_ens_' + str(ens))
 torch.save(model2.state_dict(), model_path  + 'model_ens_' + str(9-ens))
 
 # test:
-for station in tqdm(station_test, desc='testing'):
-    ds = gridMETDatasetStation(forcings=forcings, attributions=attributions, target=target, window_size=WINDOW_SIZE,
-                                mode='ALL', topo_file=topo, station_id=station) # mode set to ALL for cross
+for station in tqdm(station_ids, desc='testing'):
+    ds = gridMETDatasetStationWY(forcings=forcings, attributions=attributions, target=target, window_size=WINDOW_SIZE,
+                                mode='test', topo_file=topo, station_id=station,
+                                helper=helper,
+                                train_wy=train_wys, test_wy=test_wys,
+                                target_mean=target_mean, target_std=target_std,
+                                ) # mode set to ALL for cross
     if ds.__len__()>0:
         y_true, y_pred = evaluate(model1, ds, device=device)
         y_true = y_true.reshape(-1, 1)
