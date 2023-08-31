@@ -52,3 +52,6 @@ epoch=*
 lsf-ckpt*
 *.png
 *.json
+*.p
+*result_pred_*
+*result_true_*
