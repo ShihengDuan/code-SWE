@@ -23,12 +23,14 @@ def get_args():
     parser.add_argument('--ens', type=int)
     parser.add_argument('--device', type=int, default=-1)
     parser.add_argument('--model', type=str, default='lstm')
+    parser.add_argument('--mountain', type=str, default='CO')
     args = vars(parser.parse_args())
     return args
 
 args = get_args()
 ens = args['ens']
 device_id = args['device']
+mountain = args['mountain'].upper()
 devices = [torch.device('cuda:0'), torch.device('cuda:1'), torch.device('cuda:2'), torch.device('cuda:3')]
 print(ens, ' STARTED')
 if device_id !=-1:
@@ -39,8 +41,8 @@ else:
 model_type = args['model'].upper()
 pool_size = 4
 
-path = '/p/gpfs1/shiduan/SWE/Livneh/LSTM/ori/CO/'
-model_path = 'runs_PRISM/LSTM/model_ens_'
+path = '/p/gpfs1/shiduan/SWE/Livneh/LSTMwRad/rel/'+mountain+'/'
+model_path = 'runs_PRISM/LSTMwRad_rel/model_ens_'
 if not os.path.exists(path):
     os.makedirs(path, exist_ok=True)
 
@@ -49,17 +51,18 @@ RELU_FLAG = False
 
 attributions = ['longitude', 'latitude', 'elevation_prism', 'dah', 'trasp']
 
-forcings = {'pr': 'spatialForcings/CO_prec.nc', 
-            'tmmn': 'spatialForcings/CO_tmin.nc',
-            'tmmx': 'spatialForcings/CO_tmax.nc',
+forcings = {'pr': 'spatialForcings/'+mountain+'_prec.nc', 
+            'tmmn': 'spatialForcings/'+mountain+'_tmin.nc',
+            'tmmx': 'spatialForcings/'+mountain+'_tmax.nc',
+            'netrad': 'spatialForcings/'+mountain+'_netrad.nc'
             }
 n_inputs = len(attributions) + len(forcings)
-topo_file = 'spatialForcings/CO_topo_file.nc'
+topo_file = 'spatialForcings/'+mountain+'_topo_file.nc'
 # topo_file = '../gridMET/Rocky/topo_file_30m.nc'
 # topo_file = '../MACA/'+ 'rocky' + '_topo_file_prism_nn.nc' # PRISM topo file. 
 def inference(lat_id, device=device):
     ds = COgridMETDataset(forcings=forcings, lat=lat_id, attributions=attributions, topo_file=topo_file,
-                          window_size=180, hist=False, proj=True, 
+                          window_size=180, hist=False, proj=False, 
                           scaler_mean='livneh_mean.nc',
                           scaler_std='livneh_std.nc')
     if model_type == 'LSTM':
@@ -98,7 +101,7 @@ if __name__ == '__main__':
     except RuntimeError:
         pass
     ds = COgridMETDataset(forcings=forcings, lat=0, attributions=attributions, topo_file=topo_file,
-                          window_size=180, hist=False, proj=True, 
+                          window_size=180, hist=False, proj=False, 
                           scaler_mean='livneh_mean.nc',
                           scaler_std='livneh_std.nc')
     n_samples = ds.n_samples

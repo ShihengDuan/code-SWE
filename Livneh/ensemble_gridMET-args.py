@@ -97,9 +97,9 @@ else:
     device = devices[ens%4] 
 model_type = 'LSTM'
 if rel==0:
-    path = 'runs_PRISM/' + model_type.upper() + '/'
+    path = 'runs_PRISM/' + model_type.upper() + 'wRad/'
 else:
-    path = 'runs_PRISM/' + model_type.upper() + '_rel/'
+    path = 'runs_PRISM/' + model_type.upper() + 'wRad_rel/'
 if not os.path.exists(path):
     os.makedirs(path, exist_ok=True)
     print('Make output directory')
@@ -115,6 +115,7 @@ attributions = ['longitude', 'latitude', 'elevation_prism', 'dah', 'trasp']
 forcings = {'pr': 'Prec_wus_clean.nc', 
             'tmmn': 'Tmin_wus_clean.nc',
             'tmmx': 'Tmax_wus_clean.nc',
+            'netrad': 'NetRad_wus_clean.nc'
             }
 
 n_inputs = len(attributions) + len(forcings)
